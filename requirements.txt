@@ -4,3 +4,4 @@ pyttsx3
 sounddevice
 numpy
 scipy
+python-dotenv
