@@ -39,3 +39,8 @@ brain/
 .idea/
 *.swp
 *.swo
+
+# Node / Electron artifacts
+node_modules/
+npm-debug.log*
+yarn-error.log*
