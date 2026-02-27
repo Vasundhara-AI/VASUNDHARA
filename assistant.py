@@ -1,12 +1,15 @@
 import queue
+import re
+import string
 import threading
+import time
 import tkinter as tk
 from datetime import datetime
 from tkinter import messagebox, scrolledtext, ttk
 
 from ai_engine import AIEngine
 from commands import handle_command
-from config import ASSISTANT_GREETING, EXIT_KEYWORDS, LISTEN_SECONDS
+from config import ASSISTANT_GREETING, EXIT_KEYWORDS, LISTEN_SECONDS, WAKE_WORDS
 from voice import VoiceEngine
 
 
@@ -23,6 +26,9 @@ class AssistantGUI:
         self.ready = False
         self.is_listening = False
         self.speak_enabled = True
+        self.is_awake = False
+        self.last_wake_at = 0.0
+        self.wake_window_seconds = 15.0
 
         self.ui_queue = queue.Queue()
         self.operation_lock = threading.Lock()
@@ -191,7 +197,8 @@ class AssistantGUI:
         self._set_status("Ready")
         self._append_assistant(ASSISTANT_GREETING)
 
-        threading.Thread(target=self.voice.speak, args=(ASSISTANT_GREETING,), daemon=True).start()
+        self.voice.speak(ASSISTANT_GREETING, wait=False)
+        self._start_voice_loop(auto=True)
 
     def _on_init_error(self, error_text):
         self._set_status("Initialization failed")
@@ -214,14 +221,61 @@ class AssistantGUI:
             if self.ready and not self.is_listening:
                 self._set_status_async("Ready")
 
-    def _process_transcript_locked(self, transcript):
+    def _speak_response(self, text, wait=True):
+        if not self.speak_enabled or self.voice is None:
+            return
+        self._set_status_async("Speaking...")
+        self.voice.speak(text, wait=wait)
+
+    def _normalize_for_wake(self, text):
+        cleaned = text.lower().translate(str.maketrans("", "", string.punctuation))
+        return " ".join(cleaned.split())
+
+    def _apply_wake_gate(self, transcript):
+        normalized = self._normalize_for_wake(transcript)
+        now = time.time()
+
+        if self.is_awake and (now - self.last_wake_at) > self.wake_window_seconds:
+            self.is_awake = False
+
+        matched_wake = None
+        for wake_word in WAKE_WORDS:
+            if wake_word in normalized:
+                matched_wake = wake_word
+                break
+
+        if matched_wake is not None:
+            self.is_awake = True
+            self.last_wake_at = now
+            wake_pattern = re.compile(re.escape(matched_wake), re.IGNORECASE)
+            command_text = wake_pattern.sub("", transcript, count=1).strip(" ,.!?")
+            return transcript, command_text
+
+        if not self.is_awake:
+            return None, None
+
+        self.last_wake_at = now
+        return transcript, transcript
+
+    def _process_transcript_locked(self, transcript, from_voice=False):
+        if from_voice:
+            display_text, gated_text = self._apply_wake_gate(transcript)
+            if gated_text is None:
+                return
+
+            self._queue_ui(self._append_user, display_text)
+            if not gated_text:
+                response = "Yes?"
+                self._queue_ui(self._append_assistant, response)
+                self._speak_response(response, wait=False)
+                return
+            transcript = gated_text
+
         lowered = transcript.lower()
         if any(word in lowered for word in EXIT_KEYWORDS):
             response = "Goodbye!"
             self._queue_ui(self._append_assistant, response)
-            if self.speak_enabled and self.voice is not None:
-                self._set_status_async("Speaking...")
-                self.voice.speak(response)
+            self._speak_response(response)
             self.stop_listen_event.set()
             self._queue_ui(self._stop_voice_ui)
             return
@@ -232,12 +286,13 @@ class AssistantGUI:
             response = self.ai.generate_response(transcript)
 
         self._queue_ui(self._append_assistant, response)
-        if self.speak_enabled and self.voice is not None:
-            self._set_status_async("Speaking...")
-            self.voice.speak(response)
+        self._speak_response(response)
 
     def _capture_transcript_locked(self):
-        self._set_status_async(f"Listening ({LISTEN_SECONDS}s)...")
+        if self.is_listening and not self.is_awake:
+            self._set_status_async(f"Waiting for wake words ({LISTEN_SECONDS}s)...")
+        else:
+            self._set_status_async(f"Listening ({LISTEN_SECONDS}s)...")
         audio_data = self.voice.listen(LISTEN_SECONDS)
         if self.stop_listen_event.is_set():
             return None
@@ -245,10 +300,10 @@ class AssistantGUI:
         self._set_status_async("Transcribing...")
         transcript = self.voice.transcribe(audio_data).strip()
         if not transcript or len(transcript) < 2:
-            self._queue_ui(self._append_system, "No clear speech detected.")
+            if not self.is_listening:
+                self._queue_ui(self._append_system, "No clear speech detected.")
             return None
 
-        self._queue_ui(self._append_user, transcript)
         return transcript
 
     def _listen_once_worker(self):
@@ -260,7 +315,8 @@ class AssistantGUI:
         try:
             transcript = self._capture_transcript_locked()
             if transcript:
-                self._process_transcript_locked(transcript)
+                self._queue_ui(self._append_user, transcript)
+                self._process_transcript_locked(transcript, from_voice=False)
         except Exception as exc:
             self._queue_ui(self._append_system, f"Voice error: {exc}")
         finally:
@@ -269,6 +325,7 @@ class AssistantGUI:
                 self._set_status_async("Ready")
 
     def _voice_loop_worker(self):
+        consecutive_errors = 0
         while not self.stop_listen_event.is_set():
             acquired = self.operation_lock.acquire(timeout=0.2)
             if not acquired:
@@ -277,10 +334,14 @@ class AssistantGUI:
             try:
                 transcript = self._capture_transcript_locked()
                 if transcript:
-                    self._process_transcript_locked(transcript)
+                    self._process_transcript_locked(transcript, from_voice=True)
+                consecutive_errors = 0
             except Exception as exc:
                 self._queue_ui(self._append_system, f"Voice loop error: {exc}")
-                break
+                consecutive_errors += 1
+                if consecutive_errors >= 3:
+                    self._queue_ui(self._append_system, "Stopping voice mode after repeated errors.")
+                    break
             finally:
                 self.operation_lock.release()
 
@@ -301,12 +362,17 @@ class AssistantGUI:
             return
         threading.Thread(target=self._listen_once_worker, daemon=True).start()
 
-    def _start_voice_loop(self):
+    def _start_voice_loop(self, auto=False):
         if not self.ready or self.is_listening:
             return
         self.is_listening = True
+        self.is_awake = False
+        self.last_wake_at = 0.0
         self.stop_listen_event.clear()
-        self._append_system("Continuous voice mode started.")
+        if auto:
+            self._append_system("Wake mode active. Say: Hey Vasundhara | Hey Vasu | Ok Vasundhara | Okay Vasu.")
+        else:
+            self._append_system("Continuous voice mode started. Waiting for wake words.")
         self.start_voice_button.configure(state=tk.DISABLED)
         self.stop_voice_button.configure(state=tk.NORMAL)
         threading.Thread(target=self._voice_loop_worker, daemon=True).start()
@@ -315,6 +381,8 @@ class AssistantGUI:
         if self.is_listening:
             self._append_system("Continuous voice mode stopped.")
         self.is_listening = False
+        self.is_awake = False
+        self.last_wake_at = 0.0
         self.start_voice_button.configure(state=tk.NORMAL if self.ready else tk.DISABLED)
         self.stop_voice_button.configure(state=tk.DISABLED)
 
@@ -324,6 +392,11 @@ class AssistantGUI:
 
     def _on_close(self):
         self.stop_listen_event.set()
+        if self.voice is not None:
+            try:
+                self.voice.close()
+            except Exception:
+                pass
         self.root.destroy()
 
     def run(self):

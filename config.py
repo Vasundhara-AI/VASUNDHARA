@@ -44,8 +44,15 @@ else:
 STT_MODEL_NAME = os.getenv("STT_MODEL_NAME", "base.en")
 SAMPLE_RATE = int(os.getenv("SAMPLE_RATE", "16000"))
 CHANNELS = int(os.getenv("CHANNELS", "1"))
-LISTEN_SECONDS = float(os.getenv("LISTEN_SECONDS", "5"))
-ASSISTANT_GREETING = os.getenv("ASSISTANT_GREETING", "Hello i am LENOVO")
+LISTEN_SECONDS = float(os.getenv("LISTEN_SECONDS", "3"))
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "128"))
+ASSISTANT_GREETING = os.getenv("ASSISTANT_GREETING", "Hello I am Vasundhara")
+WAKE_WORDS = (
+    "hey vasundhara",
+    "hey vasu",
+    "ok vasundhara",
+    "okay vasu",
+)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 USERNAME = os.environ.get("USERNAME", "")
 
