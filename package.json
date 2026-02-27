@@ -1,0 +1,13 @@
+{
+  "name": "lenovo-voice-assistant-electron",
+  "version": "1.0.0",
+  "description": "Electron UI for Lenovo Voice Assistant",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^37.2.0"
+  }
+}

@@ -1,0 +1,7 @@
+llama-cpp-python
+openai-whisper
+pyttsx3
+sounddevice
+numpy
+scipy
+python-dotenv

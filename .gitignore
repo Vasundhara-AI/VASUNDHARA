@@ -1,0 +1,46 @@
+# Models
+models/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Audio artifacts
+temp_audio.wav
+
+# C++ Build artifacts
+build/
+dist/
+*.spec
+bin/
+obj/
+*.exe
+*.dll
+*.so
+*.dylib
+*.lib
+*.a
+*.pdb
+
+# Assistant Brain/Gemini artifacts
+.gemini/
+brain/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node / Electron artifacts
+node_modules/
+npm-debug.log*
+yarn-error.log*

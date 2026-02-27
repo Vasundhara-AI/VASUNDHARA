@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Windows AI Assistant</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main id="overlay" class="overlay compact">
+      <button id="orbBtn" class="orb" title="Open assistant panel" aria-label="Open assistant panel">
+        <span class="orb-core"></span>
+        <span class="orb-ring"></span>
+      </button>
+
+      <section id="panel" class="panel" aria-live="polite">
+        <header class="panel-header">
+          <div>
+            <h1>LENOVO Assistant</h1>
+            <p>Press Ctrl+Shift+Space to summon</p>
+          </div>
+          <div class="panel-header-right">
+            <div id="statusPill" class="status-pill">Initializing...</div>
+            <button id="closeBtn" class="ghost-btn" aria-label="Hide overlay">Hide</button>
+          </div>
+        </header>
+
+        <section id="chatBox" class="chat-box"></section>
+
+        <div class="input-row">
+          <input id="userInput" type="text" placeholder="Ask something..." />
+          <button id="sendBtn">Send</button>
+        </div>
+
+        <div class="action-row control-grid">
+          <button id="listenOnceBtn">Listen Once</button>
+          <button id="startVoiceBtn">Start Voice</button>
+          <button id="stopVoiceBtn" disabled>Stop Voice</button>
+          <button id="clearBtn">Clear Chat</button>
+
+          <label class="speak-toggle">
+            <input id="speakEnabled" type="checkbox" checked />
+            <span>Speak responses</span>
+          </label>
+        </div>
+      </section>
+    </main>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
