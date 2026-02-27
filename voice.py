@@ -1,9 +1,13 @@
+import os
+
 import numpy as np
 import pyttsx3
 import sounddevice as sd
-import whisper
 
 from config import CHANNELS, SAMPLE_RATE, STT_MODEL_NAME
+
+os.environ.setdefault("NUMBA_THREADING_LAYER", "workqueue")
+import whisper
 
 
 class VoiceEngine:

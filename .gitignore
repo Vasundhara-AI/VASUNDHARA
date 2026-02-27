@@ -18,6 +18,8 @@ temp_audio.wav
 
 # C++ Build artifacts
 build/
+dist/
+*.spec
 bin/
 obj/
 *.exe

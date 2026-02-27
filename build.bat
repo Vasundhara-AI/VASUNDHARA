@@ -1,23 +1,59 @@
 @echo off
-set "VCVARSALL=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
+setlocal EnableExtensions
 
-if not exist "%VCVARSALL%" (
-    echo Error: vcvarsall.bat not found at %VCVARSALL%
+cd /d "%~dp0"
+
+set "PYTHON=.venv\Scripts\python.exe"
+if not exist "%PYTHON%" (
+    echo [ERROR] Virtual environment Python not found at "%PYTHON%".
+    echo Create/activate your venv first, then retry.
     exit /b 1
 )
 
-call "%VCVARSALL%" x64
+echo [INFO] Ensuring PyInstaller is installed...
+"%PYTHON%" -m pip show pyinstaller >nul 2>&1
+if errorlevel 1 (
+    "%PYTHON%" -m pip install pyinstaller
+    if errorlevel 1 (
+        echo [ERROR] Failed to install PyInstaller.
+        exit /b 1
+    )
+)
 
-echo Compiling...
-cl /EHsc /O2 /I"lib/llama.cpp/include" /I"lib/whisper.cpp/include" /I"lib/llama.cpp/ggml/include" /I"lib/whisper.cpp/ggml/include" ^
-    src/main.cpp src/audio_engine.cpp src/assistant_brain.cpp ^
-    /Fe:assistant.exe ^
-    ole32.lib user32.lib winmm.lib ^
-    /link /LIBPATH:"lib/llama.cpp" /LIBPATH:"lib/whisper.cpp"
+echo [INFO] Building Windows exe...
+"%PYTHON%" -m PyInstaller ^
+  --noconfirm ^
+  --clean ^
+  --name windows-ai-assistant ^
+  --onedir ^
+  --windowed ^
+  --collect-all whisper ^
+  --collect-all tiktoken ^
+  --collect-all llama_cpp ^
+  --hidden-import pyttsx3.drivers.sapi5 ^
+  assistant.py
 
-if %ERRORLEVEL% neq 0 (
-    echo Compilation failed.
+if errorlevel 1 (
+    echo [ERROR] PyInstaller build failed.
     exit /b 1
 )
 
-echo Build successful! Run assistant.exe to start.
+if exist ".env" (
+    copy /Y ".env" "dist\windows-ai-assistant\.env" >nul
+)
+
+if /I "%~1"=="--with-models" (
+    if exist "models" (
+        echo [INFO] Copying models folder into dist output...
+        xcopy /E /I /Y "models" "dist\windows-ai-assistant\models" >nul
+    )
+)
+
+echo [OK] Build complete.
+echo Output exe: dist\windows-ai-assistant\windows-ai-assistant.exe
+echo.
+echo Tip:
+echo   - Use "build.bat --with-models" to package local model files into dist.
+echo   - Without that flag, keep your models folder next to the exe folder.
+
+endlocal

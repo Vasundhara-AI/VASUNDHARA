@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 try:
@@ -7,18 +8,37 @@ except ImportError:
     load_dotenv = None
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+APP_ROOT = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else PROJECT_ROOT
+
 if load_dotenv is not None:
-    load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=False)
+    env_candidates = [
+        APP_ROOT / ".env",
+        APP_ROOT.parent / ".env",
+        APP_ROOT.parent.parent / ".env",
+        PROJECT_ROOT / ".env",
+    ]
+    for env_path in env_candidates:
+        if env_path.exists():
+            load_dotenv(dotenv_path=env_path, override=False)
+            break
 
 _raw_llm_model_path = os.getenv("LLM_MODEL_PATH", "models/phi-3-mini-4k-instruct.gguf")
 _candidate_llm_path = Path(_raw_llm_model_path).expanduser()
 if not _candidate_llm_path.is_absolute():
-    _candidate_llm_path = (PROJECT_ROOT / _candidate_llm_path).resolve()
+    _candidate_llm_path = (APP_ROOT / _candidate_llm_path).resolve()
 
 if _candidate_llm_path.exists():
     LLM_MODEL_PATH = str(_candidate_llm_path)
 else:
-    gguf_candidates = sorted((PROJECT_ROOT / "models").glob("*.gguf"))
+    model_dirs = [
+        APP_ROOT / "models",
+        APP_ROOT.parent / "models",
+        APP_ROOT.parent.parent / "models",
+        PROJECT_ROOT / "models",
+    ]
+    gguf_candidates = []
+    for model_dir in model_dirs:
+        gguf_candidates.extend(sorted(model_dir.glob("*.gguf")))
     LLM_MODEL_PATH = str(gguf_candidates[0]) if gguf_candidates else str(_candidate_llm_path)
 
 STT_MODEL_NAME = os.getenv("STT_MODEL_NAME", "base.en")
